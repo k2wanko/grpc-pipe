@@ -1,0 +1,29 @@
+syntax = "proto3";
+option go_package = "echo";
+
+// Echo Service
+//
+// Echo Service API consists of a single service which returns
+// a message.
+package echo;
+
+import "google/api/annotations.proto";
+
+// SimpleMessage represents a simple message sent to the Echo service.
+message Message {
+  string value = 1;
+}
+
+// Echo service responds to incoming echo requests.
+service EchoService {
+  // Echo method receives a simple message and returns it.
+  //
+  // The message posted as the id parameter will also be
+  // returned.
+  rpc Echo(Message) returns (Message) {
+    option (google.api.http) = {
+      post: "/echo"
+      body: "*"
+    };
+  }
+}
