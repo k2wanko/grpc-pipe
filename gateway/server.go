@@ -114,7 +114,7 @@ func (s *Server) Request(ctx context.Context) *http.Request {
 	return nil
 }
 
-func (s *Server) RegisterService(sf interface{}, cf func(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error, srv interface{}) {
+func (s *Server) RegisterService(srv interface{}, sf interface{}, cf func(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error) {
 	f := reflect.ValueOf(sf)
 	f.Call([]reflect.Value{
 		reflect.ValueOf(s.s),
