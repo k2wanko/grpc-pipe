@@ -17,6 +17,14 @@ import (
 
 const header = "x-grpc-pipe-gateway-request-id"
 
+type ctxKey struct {
+	key string
+}
+
+var (
+	ServerContextKey = &ctxKey{"server"}
+)
+
 type Server struct {
 	ctx  context.Context
 	mu   sync.RWMutex
@@ -29,11 +37,12 @@ type Server struct {
 type options struct {
 	grpcopts []grpc.ServerOption
 	gwopts   []runtime.ServeMuxOption
+	unaryInt grpc.UnaryServerInterceptor
 }
 
 type ServerOption func(*options)
 
-func WithGrpcOptions(opts ...grpc.ServerOption) ServerOption {
+func withGrpcOptions(opts ...grpc.ServerOption) ServerOption {
 	return func(o *options) {
 		o.grpcopts = opts
 	}
@@ -45,7 +54,30 @@ func WithGatewayOptions(opts ...runtime.ServeMuxOption) ServerOption {
 	}
 }
 
+func UnaryInterceptor(i grpc.UnaryServerInterceptor) ServerOption {
+	return func(o *options) {
+		if o.unaryInt != nil {
+			panic("The unary server interceptor has been set.")
+		}
+		o.unaryInt = i
+	}
+}
+
+func ctxValInjector(srv *Server) grpc.ServerOption {
+	return grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		ctx = context.WithValue(ctx, ServerContextKey, srv)
+		return handler(ctx, req)
+	})
+}
+
 func New(ctx context.Context, opt ...ServerOption) *Server {
+	s := &Server{
+		ctx:  ctx,
+		reqs: make(map[string]*http.Request),
+	}
+
+	opt = append(opt, withGrpcOptions(ctxValInjector(s)))
+
 	opts := new(options)
 	for _, o := range opt {
 		o(opts)
@@ -58,13 +90,9 @@ func New(ctx context.Context, opt ...ServerOption) *Server {
 		panic(err)
 	}
 
-	s := &Server{
-		ctx:  ctx,
-		s:    grpc.NewServer(opts.grpcopts...),
-		cc:   cc,
-		mux:  runtime.NewServeMux(opts.gwopts...),
-		reqs: make(map[string]*http.Request),
-	}
+	s.s = grpc.NewServer(opts.grpcopts...)
+	s.cc = cc
+	s.mux = runtime.NewServeMux(opts.gwopts...)
 
 	go s.s.Serve(l)
 	go func() {
