@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"reflect"
 	"sync"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -63,9 +64,39 @@ func UnaryInterceptor(i grpc.UnaryServerInterceptor) ServerOption {
 	}
 }
 
-func ctxValInjector(srv *Server) grpc.ServerOption {
+type mergeCtx struct {
+	c1, c2 context.Context
+}
+
+func (c *mergeCtx) Deadline() (Deadline time.Time, ok bool) {
+	//TODO: merge
+	return c.c1.Deadline()
+}
+
+func (c *mergeCtx) Done() <-chan struct{} {
+	//TODO: merge
+	return c.c1.Done()
+}
+
+func (c *mergeCtx) Err() error {
+	//TODO: merge
+	return c.c1.Err()
+}
+
+func (c *mergeCtx) Value(key interface{}) interface{} {
+	if v := c.c1.Value(key); v != nil {
+		return v
+	}
+	return c.c2.Value(key)
+}
+
+func ctxValInjector(parentCtx context.Context, srv *Server, int grpc.UnaryServerInterceptor) grpc.ServerOption {
 	return grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		ctx = &mergeCtx{ctx, parentCtx}
 		ctx = context.WithValue(ctx, ServerContextKey, srv)
+		if int != nil {
+			return int(ctx, req, info, handler)
+		}
 		return handler(ctx, req)
 	})
 }
@@ -76,12 +107,12 @@ func New(ctx context.Context, opt ...ServerOption) *Server {
 		reqs: make(map[string]*http.Request),
 	}
 
-	opt = append(opt, withGrpcOptions(ctxValInjector(s)))
-
 	opts := new(options)
 	for _, o := range opt {
 		o(opts)
 	}
+
+	withGrpcOptions(ctxValInjector(ctx, s, opts.unaryInt))(opts)
 
 	l := pipe.Listen()
 
