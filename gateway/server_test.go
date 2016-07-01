@@ -28,7 +28,7 @@ func newTestRequest(b string) *http.Request {
 func TestServer(t *testing.T) {
 	ctx := context.Background()
 	s := New(ctx)
-	s.RegisterService(pb.RegisterEchoServiceServer, pb.RegisterEchoServiceHandler, new(echo))
+	s.RegisterService(new(echo), pb.RegisterEchoServiceServer, pb.RegisterEchoServiceHandler)
 
 	b := `{"value":"Hi"}`
 	r := newTestRequest(b)
